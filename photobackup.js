@@ -77,7 +77,12 @@
             if (config.hasOwnProperty(section_name) && config[section_name].hasOwnProperty('Port')) {
                 port = config[section_name].Port;
             }
-            app.listen(port);
+            var address = '127.0.0.1';
+            if (config.hasOwnProperty(section_name) && config[section_name].hasOwnProperty('BindAddress')) {
+                address = config[section_name].BindAddress;
+            }
+
+            app.listen(port, address);
 
         } catch (e) {
             if (e instanceof Error && e.code === 'ENOENT') {

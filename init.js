@@ -82,6 +82,7 @@
 
             // fill the section
             config[section_name] = {
+                'BindAddress': '127.0.0.1',
                 'MediaRoot': answers.mediaroot,
                 'Password': pass_sha,
                 'PasswordBcrypt': passhash,
