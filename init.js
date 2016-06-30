@@ -21,44 +21,77 @@
 (function () {
     'use strict';
 
-    var fs = require('fs'),
-        ini = require('ini'),
-        inquirer = require('inquirer'),
-        sha512 = require('sha512'),
-        validation_function = function (input) {
-            return (input.length !== 0);
-        },
-        questions = [
-            {
-                type: "input",
-                name: "mediaroot",
-                message: "The directory where to put the pictures (should be writable by the server you use):",
-                validate: validation_function
-            },
-            {
-                type: "input",
-                name: "owner",
-                message: "Owner of the directory:",
-                default: "www-data",
-                validate: validation_function
-            },
-            {
-                type: "password",
-                name: "password",
-                message: "The server password:",
-                validate: validation_function
-            }
-        ];
+    var bcrypt = require('bcrypt');
+    var fs = require('fs');
+    var ini = require('ini');
+    var inquirer = require('inquirer');
+    var path = require('path');
+    var sha512 = require('sha512');
 
-    var init = function (settings_path) {
+    var questions = [
+        {
+            type: "input",
+            name: "mediaroot",
+            message: "The directory where to put the pictures (should be writable by the server you use):",
+            validate: validation_function
+        },
+        {
+            type: "input",
+            name: "owner",
+            message: "Owner of the directory:",
+            default: "www-data",
+            validate: validation_function
+        },
+        {
+            type: "password",
+            name: "password",
+            message: "The server password:",
+            validate: validation_function
+        }
+    ];
+
+    // validate the answers given by the user
+    var validation_function = function (input) {
+        return (input.length !== 0);
+    };
+
+
+    // create the config object for the ini file
+    function create_config(config_path, section) {
+        try {
+            // config is the content of the ini file
+            var config = ini.parse(fs.readFileSync(config_path, 'utf-8'));
+            if (config.hasOwnProperty(section)) {
+                // if the current section already exists, update it
+                delete config[section];
+            }
+        } catch (e) {
+            // config is an empty object if there is an error
+            config = {};
+        }
+        return config;
+    }
+
+
+    // function to export
+    var init = function (config_path, username, section_name) {
         inquirer.prompt(questions, function (answers) {
-            var settings = {
-                    'MediaRoot': answers.mediaroot,
-                    'Password': sha512(answers.password).toString('hex'),
-                    'Port': 8420
-                };
-            fs.writeFileSync(settings_path, ini.stringify(settings, { section: 'photobackup' }));
-            console.log("\nCreated, now launch PhotoBackup server with 'photobackup run'");
+            var config = create_config(config_path, section_name);
+            var pass_sha = sha512(answers.password).toString('hex');
+            var passhash = bcrypt.hashSync(pass_sha, bcrypt.genSaltSync());
+
+            // fill the section
+            config[section_name] = {
+                'MediaRoot': answers.mediaroot,
+                'Password': pass_sha,
+                'PasswordBcrypt': passhash,
+                'Port': 8420
+            };
+
+            // write the whole file
+            fs.writeFileSync(config_path, ini.stringify(config));
+            var option = (username.length > 0) ? ' ' + username : '';
+            console.log("\nCreated, now launch PhotoBackup server with 'photobackup run" + option + "'");
         });
     };
 

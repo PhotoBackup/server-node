@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /*
- * Copyright (C) 2013-2015 Stéphane Péchard.
+ * Copyright (C) 2013-2016 Stéphane Péchard.
  *
  * This file is part of PhotoBackup.
  *
@@ -21,52 +21,69 @@
 (function () {
     'use strict';
 
+    // command line documentation
     var doc = "\n" +
             "PhotoBackup NodeJS server.\n" +
             "\n" +
             "Usage:\n" +
-            "  photobackup init\n" +
-            "  photobackup run\n" +
+            "  photobackup init [<username>]\n" +
+            "  photobackup run [<username>]\n" +
             "  photobackup (-h | --help)\n" +
             "  photobackup --version\n" +
             "\n" +
             "Options:\n" +
             "  -h --help     Show this screen.\n" +
-            "  --version     Show version.\n",
-        bodyParser = require('body-parser'),
-        docopt = require('docopt').docopt,
-        express = require('express'),
-        fs = require('fs'),
-        ini = require('ini'),
-        init = require('./init').init,
-        multer  = require('multer'),
-        path = require('path'),
-        packagejson = require(path.join(__dirname, 'package.json')),
+            "  --version     Show version.\n";
 
-        app = express(),
-        args = docopt(doc, {version: packagejson.version}),
-        home = process.env[(process.platform === 'win32') ? 'USERPROFILE' : 'HOME'],
-        settings_path = path.join(home, '.photobackup'),
-        settings = {};
+    // imports
+    var bcrypt = require('bcrypt');
+    var bodyParser = require('body-parser');
+    var docopt = require('docopt').docopt;
+    var express = require('express');
+    var fs = require('fs');
+    var ini = require('ini');
+    var pb_init = require('./init').init;
+    var multer = require('multer');
+    var path = require('path');
+    var packagejson = require(path.join(__dirname, 'package.json'));
+
+    // variables
+    var app = express();
+    var args = docopt(doc, {version: packagejson.version});
+    var home = process.env[(process.platform === 'win32') ? 'USERPROFILE' : 'HOME'];
+    var config_path = path.join(home, '.photobackup');
+    var config = {};
+
+    // compute some internal information
+    var username = ''; // default
+    if (args.hasOwnProperty('<username>') && args['<username>'] !== null) {
+        username = args['<username>'];
+    }
+    var section_name = 'photobackup'; // default
+    if (username.length > 0) {
+        section_name += '-' + username;
+    }
 
 
+    // which command to activate
     if (args.init) {
-        init(settings_path);
+        pb_init(config_path, username, section_name);
     } else if (args.run) {
 
         try {
-            settings = ini.parse(fs.readFileSync(settings_path, 'utf-8'));
+            config = ini.parse(fs.readFileSync(config_path, 'utf-8'));
 
             var port = 8420; // default
-            if (settings.hasOwnProperty('photobackup') && settings.photobackup.hasOwnProperty('Port')) {
-                port = settings.photobackup.Port;
+            if (config.hasOwnProperty(section_name) && config[section_name].hasOwnProperty('Port')) {
+                port = config[section_name].Port;
             }
             app.listen(port);
 
         } catch (e) {
             if (e instanceof Error && e.code === 'ENOENT') {
-                console.error("Can't read configuration file, running 'photobackup init'");
-                init(settings_path);
+                var option = (username.length > 0) ? ' ' + username : '';
+                console.error("Can't read configuration file, running 'photobackup init" + option + "'");
+                pb_init(config_path, username, section_name);
             } else {
                 console.error("Unknown error: " + e);
             }
@@ -74,11 +91,11 @@
     }
 
 
-    if (settings.hasOwnProperty('photobackup')) {
+    if (config.hasOwnProperty(section_name)) {
 
         // multer creates the directory if it does not exist
         app.use(multer({
-            dest: settings.photobackup.MediaRoot,
+            dest: config[section_name].MediaRoot,
             rename: function (fieldname, filename) { return filename; }
         }));
         // allows to access body parameters of the requests, because you have to...
@@ -100,7 +117,7 @@
                 res.status(400).send({ error: 'missing parameter in the request!' });
             }
 
-            if (password !== settings.photobackup.Password) {
+            if (!bcrypt.compareSync(password, config[section_name].PasswordBcrypt)) {
                 res.status(403).send({ error: 'wrong password!' });
             }
             if (req.files.upfile === undefined) {
@@ -123,11 +140,11 @@
 
         app.post('/test', function (req, res) {
             var password = req.body.password;
-            if (password !== settings.photobackup.Password) {
+            if (password !== config[section_name].Password) {
                 res.status(403).send({ error: 'wrong password!' });
             }
 
-            fs.access(settings.photobackup.MediaRoot, fs.W_OK, function (err) {
+            fs.access(config[section_name].MediaRoot, fs.W_OK, function (err) {
                 if (err) {
                     res.status(500).send({ error: "Can't write to MEDIA_ROOT!" });
                 } else {
