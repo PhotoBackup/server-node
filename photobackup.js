@@ -28,6 +28,7 @@
             "Usage:\n" +
             "  photobackup init [<username>]\n" +
             "  photobackup run [<username>]\n" +
+            "  photobackup list\n" +
             "  photobackup (-h | --help)\n" +
             "  photobackup --version\n" +
             "\n" +
@@ -72,16 +73,13 @@
 
         try {
             config = ini.parse(fs.readFileSync(config_path, 'utf-8'));
-
-            var port = 8420; // default
-            if (config.hasOwnProperty(section_name) && config[section_name].hasOwnProperty('Port')) {
-                port = config[section_name].Port;
-            }
-            var address = '127.0.0.1';
-            if (config.hasOwnProperty(section_name) && config[section_name].hasOwnProperty('BindAddress')) {
-                address = config[section_name].BindAddress;
+            if (!config.hasOwnProperty(section_name)) {
+                console.error('ERROR: Unknown username in the current configuration...');
+                process.exit();
             }
 
+            var port = config[section_name].Port || 8420;
+            var address = config[section_name].BindAddress || '127.0.0.1';
             app.listen(port, address, function () {
                 console.log('PhotoBackup client listening on http://' + address + ':' + port + '\n');
             });
@@ -95,6 +93,14 @@
                 console.error("Unknown error: " + e);
             }
         }
+    } else if (args.list) {
+      try {
+          config = ini.parse(fs.readFileSync(config_path, 'utf-8'));
+          var list = Object.keys(config).join('\n').replace('photobackup-', '- ');
+          console.log('Runnable PhotoBackup configurations are:\n' + list);
+      } catch (e) {
+          console.log("No configuration file found, run 'photobackup init' to create one");
+      }
     }
 
 
@@ -114,7 +120,7 @@
         ////////////
         app.get('/', function (req, res) {
             res.redirect('https://photobackup.github.io/');
-            pblog(console.log, res.req.method + ' ' + res.req.url, res.statusCode);
+            end_with_success(res);
         });
 
 
@@ -145,9 +151,7 @@
 
             // file is saved by some NodeJS magic...
             res.send();
-            if (res.statusCode === 200) {
-                pblog(console.log, res.req.method + ' ' + res.req.url, res.statusCode);
-            }
+            end_with_success(res);
         });
 
 
@@ -162,8 +166,7 @@
                     end(res, 500, "Can't write to MEDIA_ROOT!");
                 } else {
                     res.send();
-                    // console.log(res.req.method + ' ' + res.req.url, res.statusCode);
-                    pblog(console.log, res.req.method + ' ' + res.req.url, res.statusCode);
+                    end_with_success(res);
                 }
             });
         });
@@ -174,6 +177,13 @@
     function end(res, code, message) {
         res.status(code).send({ error: message });
         pblog(console.error, res.req.method + ' ' + res.req.url, code + ' => ' + message);
+    }
+
+
+    function end_with_success(res) {
+        if (res.statusCode === 200) {
+            pblog(console.log, res.req.method + ' ' + res.req.url, res.statusCode);
+        }
     }
 
 
