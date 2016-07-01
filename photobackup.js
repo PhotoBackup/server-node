@@ -82,7 +82,9 @@
                 address = config[section_name].BindAddress;
             }
 
-            app.listen(port, address);
+            app.listen(port, address, function () {
+                console.log('PhotoBackup client listening on http://' + address + ':' + port + '\n');
+            });
 
         } catch (e) {
             if (e instanceof Error && e.code === 'ENOENT') {
@@ -107,8 +109,12 @@
         app.use(bodyParser.urlencoded({ extended: true }));
 
 
+        ////////////
+        // routes //
+        ////////////
         app.get('/', function (req, res) {
             res.redirect('https://photobackup.github.io/');
+            pblog(console.log, res.req.method + ' ' + res.req.url, res.statusCode);
         });
 
 
@@ -118,44 +124,61 @@
                 password = req.body.password;
                 filesize = parseInt(req.body.filesize, 10);
             } catch (err) {
-                console.error(err);
-                res.status(400).send({ error: 'missing parameter in the request!' });
+                end(res, 400, 'missing parameter in the request! => ' + err);
             }
 
             if (!bcrypt.compareSync(password, config[section_name].PasswordBcrypt)) {
-                res.status(403).send({ error: 'wrong password!' });
+                end(res, 403, 'wrong password!');
             }
-            if (req.files.upfile === undefined) {
-                res.status(403).send({ error: 'missing upfile!' });
+            if (!req.files.hasOwnProperty('upfile')) {
+                end(res, 403, 'missing upfile');
             }
-            if (req.files.upfile.fieldname === undefined) {
-                res.status(403).send({ error: 'upfile has no filedname!' });
+            if (!req.files.upfile.hasOwnProperty('fieldname')) {
+                end(res, 403, 'upfile has no filedname!');
             }
             if (req.files.upfile.fieldname !== 'upfile') {
-                res.status(403).send({ error: "upfile should be named 'upfile'!" });
+                end(res, 403, "upfile should be named 'upfile'!");
             }
             if (filesize !== req.files.upfile.size) {
-                res.status(411).send({ error: "file sizes do not match!" });
+                end(res, 411, 'file sizes do not match!');
             }
 
             // file is saved by some NodeJS magic...
             res.send();
+            if (res.statusCode === 200) {
+                pblog(console.log, res.req.method + ' ' + res.req.url, res.statusCode);
+            }
         });
 
 
         app.post('/test', function (req, res) {
             var password = req.body.password;
             if (password !== config[section_name].Password) {
-                res.status(403).send({ error: 'wrong password!' });
+                end(res, 403, 'wrong password!');
             }
 
             fs.access(config[section_name].MediaRoot, fs.W_OK, function (err) {
                 if (err) {
-                    res.status(500).send({ error: "Can't write to MEDIA_ROOT!" });
+                    end(res, 500, "Can't write to MEDIA_ROOT!");
                 } else {
                     res.send();
+                    // console.log(res.req.method + ' ' + res.req.url, res.statusCode);
+                    pblog(console.log, res.req.method + ' ' + res.req.url, res.statusCode);
                 }
             });
         });
+    }
+
+
+    // show error and return response
+    function end(res, code, message) {
+        res.status(code).send({ error: message });
+        pblog(console.error, res.req.method + ' ' + res.req.url, code + ' => ' + message);
+    }
+
+
+    // minimalist logger
+    function pblog(console_func, message, suffix) {
+        console_func((new Date()).toISOString(), message || '', suffix || '');
     }
 }());
