@@ -58,9 +58,10 @@
 
     // create the config object for the ini file
     function create_config(config_path, section) {
+        var config = {};
         try {
             // config is the content of the ini file
-            var config = ini.parse(fs.readFileSync(config_path, 'utf-8'));
+            config = ini.parse(fs.readFileSync(config_path, 'utf-8'));
             if (config.hasOwnProperty(section)) {
                 // if the current section already exists, update it
                 delete config[section];
