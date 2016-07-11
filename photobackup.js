@@ -22,37 +22,34 @@
     'use strict';
 
     // command line documentation
-    var doc = "\n" +
-            "PhotoBackup NodeJS server.\n" +
-            "\n" +
-            "Usage:\n" +
-            "  photobackup init [<username>]\n" +
-            "  photobackup run [<username>]\n" +
-            "  photobackup list\n" +
-            "  photobackup (-h | --help)\n" +
-            "  photobackup --version\n" +
-            "\n" +
-            "Options:\n" +
-            "  -h --help     Show this screen.\n" +
-            "  --version     Show version.\n";
+    var doc = '\n' +
+            'PhotoBackup NodeJS server.\n' +
+            '\n' +
+            'Usage:\n' +
+            '  photobackup init [<username>]\n' +
+            '  photobackup run [<username>]\n' +
+            '  photobackup list\n' +
+            '  photobackup (-h | --help)\n' +
+            '  photobackup --version\n' +
+            '\n' +
+            'Options:\n' +
+            '  -h --help     Show this screen.\n' +
+            '  --version     Show version.\n';
 
     // imports
-    var bcrypt = require('bcrypt');
-    var bodyParser = require('body-parser');
     var docopt = require('docopt').docopt;
-    var express = require('express');
     var fs = require('fs');
     var ini = require('ini');
-    var pb_init = require('./init').init;
-    var multer = require('multer');
+    var pbInit = require('./init').init;
     var path = require('path');
     var packagejson = require(path.join(__dirname, 'package.json'));
 
     // variables
-    var app = express();
+    var expressApp = require('./express_app');
+    var app = expressApp.app;
     var args = docopt(doc, {version: packagejson.version});
     var home = process.env[(process.platform === 'win32') ? 'USERPROFILE' : 'HOME'];
-    var config_path = path.join(home, '.photobackup');
+    var configPath = path.join(home, '.photobackup');
     var config = {};
 
     // compute some internal information
@@ -60,26 +57,26 @@
     if (args.hasOwnProperty('<username>') && args['<username>'] !== null) {
         username = args['<username>'];
     }
-    var section_name = 'photobackup'; // default
+    var sectionName = 'photobackup'; // default
     if (username.length > 0) {
-        section_name += '-' + username;
+        sectionName += '-' + username;
     }
-
 
     // which command to activate
     if (args.init) {
-        pb_init(config_path, username, section_name);
+        pbInit(configPath, username, sectionName);
+
     } else if (args.run) {
 
         try {
-            config = ini.parse(fs.readFileSync(config_path, 'utf-8'));
-            if (!config.hasOwnProperty(section_name)) {
+            config = ini.parse(fs.readFileSync(configPath, 'utf-8'));
+            if (!config.hasOwnProperty(sectionName)) {
                 console.error('ERROR: Unknown username in the current configuration...');
                 process.exit();
             }
 
-            var port = config[section_name].Port || 8420;
-            var address = config[section_name].BindAddress || '127.0.0.1';
+            var port = config[sectionName].Port || 8420;
+            var address = config[sectionName].BindAddress || '127.0.0.1';
             app.listen(port, address, function () {
                 console.log('PhotoBackup client listening on http://' + address + ':' + port + '\n');
             });
@@ -88,14 +85,15 @@
             if (e instanceof Error && e.code === 'ENOENT') {
                 var option = (username.length > 0) ? ' ' + username : '';
                 console.error("Can't read configuration file, running 'photobackup init" + option + "'");
-                pb_init(config_path, username, section_name);
+                pbInit(configPath, username, sectionName);
             } else {
-                console.error("Unknown error: " + e);
+                console.error('Unknown error: ' + e);
             }
         }
+
     } else if (args.list) {
       try {
-          config = ini.parse(fs.readFileSync(config_path, 'utf-8'));
+          config = ini.parse(fs.readFileSync(configPath, 'utf-8'));
           var list = Object.keys(config).join('\n').replace('photobackup-', '- ');
           console.log('Runnable PhotoBackup configurations are:\n' + list);
       } catch (e) {
@@ -103,92 +101,8 @@
       }
     }
 
-
-    if (config.hasOwnProperty(section_name)) {
-
-        // multer creates the directory if it does not exist
-        app.use(multer({
-            dest: config[section_name].MediaRoot,
-            rename: function (fieldname, filename) { return filename; }
-        }));
-        // allows to access body parameters of the requests, because you have to...
-        app.use(bodyParser.urlencoded({ extended: true }));
-
-
-        ////////////
-        // routes //
-        ////////////
-        app.get('/', function (req, res) {
-            res.redirect('https://photobackup.github.io/');
-            end_with_success(res);
-        });
-
-
-        app.post('/', function (req, res) {
-            var password, filesize;
-            try {
-                password = req.body.password;
-                filesize = parseInt(req.body.filesize, 10);
-            } catch (err) {
-                end(res, 400, 'missing parameter in the request! => ' + err);
-            }
-
-            if (!bcrypt.compareSync(password, config[section_name].PasswordBcrypt)) {
-                end(res, 403, 'wrong password!');
-            }
-            if (!req.files.hasOwnProperty('upfile')) {
-                end(res, 403, 'missing upfile');
-            }
-            if (!req.files.upfile.hasOwnProperty('fieldname')) {
-                end(res, 403, 'upfile has no filedname!');
-            }
-            if (req.files.upfile.fieldname !== 'upfile') {
-                end(res, 403, "upfile should be named 'upfile'!");
-            }
-            if (filesize !== req.files.upfile.size) {
-                end(res, 411, 'file sizes do not match!');
-            }
-
-            // file is saved by some NodeJS magic...
-            res.send();
-            end_with_success(res);
-        });
-
-
-        app.post('/test', function (req, res) {
-            var password = req.body.password;
-            if (password !== config[section_name].Password) {
-                end(res, 403, 'wrong password!');
-            }
-
-            fs.access(config[section_name].MediaRoot, fs.W_OK, function (err) {
-                if (err) {
-                    end(res, 500, "Can't write to MEDIA_ROOT!");
-                } else {
-                    res.send();
-                    end_with_success(res);
-                }
-            });
-        });
+    if (config.hasOwnProperty(sectionName)) {
+        expressApp.createRoutes(config, sectionName);
     }
 
-
-    // show error and return response
-    function end(res, code, message) {
-        res.status(code).send({ error: message });
-        pblog(console.error, res.req.method + ' ' + res.req.url, code + ' => ' + message);
-    }
-
-
-    function end_with_success(res) {
-        if (res.statusCode === 200) {
-            pblog(console.log, res.req.method + ' ' + res.req.url, res.statusCode);
-        }
-    }
-
-
-    // minimalist logger
-    function pblog(console_func, message, suffix) {
-        console_func((new Date()).toISOString(), message || '', suffix || '');
-    }
 }());
