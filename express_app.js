@@ -32,11 +32,14 @@
     var app = express();
 
     var createRoutes = function (config, sectionName) {
-        // multer creates the directory if it does not exist
-        app.use(multer({
-            dest: config[sectionName].MediaRoot,
-            rename: function (fieldname, filename) { return filename; }
-        }));
+        var upload = multer({ storage: multer.diskStorage({
+            // multer creates the directory if it does not exist
+            destination: config[sectionName].MediaRoot,
+            filename: function (req, file, cb) {
+                cb(null, file.originalname)
+            }
+        })});
+
         // allows to access body parameters of the requests, because you have to...
         app.use(bodyParser.urlencoded({ extended: true }));
 
@@ -46,7 +49,7 @@
             endWithSuccess(res);
         });
 
-        app.post('/', function (req, res) {
+        app.post('/', upload.single('upfile'), function (req, res) {
             var password, filesize;
             try {
                 password = req.body.password;
@@ -58,16 +61,16 @@
             if (!bcrypt.compareSync(password, config[sectionName].PasswordBcrypt)) {
                 end(res, 403, 'wrong password!');
             }
-            if (!req.files.hasOwnProperty('upfile')) {
+            if (!req.hasOwnProperty('file')) {
                 end(res, 403, 'missing upfile');
             }
-            if (!req.files.upfile.hasOwnProperty('fieldname')) {
+            if (!req.file.hasOwnProperty('fieldname')) {
                 end(res, 403, 'upfile has no filedname!');
             }
-            if (req.files.upfile.fieldname !== 'upfile') {
+            if (req.file.fieldname !== 'upfile') {
                 end(res, 403, "upfile should be named 'upfile'!");
             }
-            if (filesize !== req.files.upfile.size) {
+            if (filesize !== req.file.size) {
                 end(res, 411, 'file sizes do not match!');
             }
 

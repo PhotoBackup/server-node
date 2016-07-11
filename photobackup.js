@@ -94,7 +94,9 @@
     } else if (args.list) {
       try {
           config = ini.parse(fs.readFileSync(configPath, 'utf-8'));
-          var list = Object.keys(config).join('\n').replace('photobackup-', '- ');
+          var list = Object.keys(config).join('\n')
+                                        .replace(/photobackup-/g, '- ')
+                                        .replace(/^photobackup/g, '<unnamed one>');
           console.log('Runnable PhotoBackup configurations are:\n' + list);
       } catch (e) {
           console.log("No configuration file found, run 'photobackup init' to create one");
