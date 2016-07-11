@@ -73,7 +73,7 @@
 
     // function to export
     var init = function (configPath, username, sectionName) {
-        inquirer.prompt(questions, function (answers) {
+        inquirer.prompt(questions).then(function (answers) {
             var config = createConfig(configPath, sectionName);
             var passSHA = sha512(answers.password).toString('hex');
             var passhash = bcrypt.hashSync(passSHA, bcrypt.genSaltSync());
