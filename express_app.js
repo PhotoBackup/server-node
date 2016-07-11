@@ -36,7 +36,7 @@
             // multer creates the directory if it does not exist
             destination: config[sectionName].MediaRoot,
             filename: function (req, file, cb) {
-                cb(null, file.originalname)
+                cb(null, file.originalname);
             }
         })});
 
