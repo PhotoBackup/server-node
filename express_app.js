@@ -27,18 +27,46 @@
     var express = require('express');
     var fs = require('fs');
     var multer = require('multer');
+    var path = require('path');
 
     // variables
     var app = express();
 
     var createRoutes = function (config, sectionName) {
-        var upload = multer({ storage: multer.diskStorage({
-            // multer creates the directory if it does not exist
-            destination: config[sectionName].MediaRoot,
-            filename: function (req, file, cb) {
-                cb(null, file.originalname);
+        var fileHasBeenFiltered = false;
+        var upload = multer({
+            storage: multer.diskStorage({
+                // multer creates the directory if it does not exist
+                destination: config[sectionName].MediaRoot,
+                filename: function (req, file, cb) {
+                    cb(null, file.originalname);
+                }
+            }),
+            fileFilter: function (req, file, cb) {
+                // test file existance and compare sizes
+                // this is a bit crappy, thanks to multer messing with the request...
+                try {
+                    var filepath = path.join(config[sectionName].MediaRoot, file.originalname);
+                    var filesize = parseInt(req.body.filesize, 10);
+                    var stats = fs.statSync(filepath);
+                    var localFilesize = stats["size"];
+                    if (localFilesize === filesize) {
+                        fileHasBeenFiltered = true;
+                        // fill  the request as if the file was here like it is actually...
+                        req.file = {
+                            'fieldname': 'upfile',
+                            'size': localFilesize
+                        };
+                    }
+                }
+                // if file does not exist, write it
+                catch(err) {
+                    fileHasBeenFiltered = false;
+                }
+
+                cb(null, !fileHasBeenFiltered);
             }
-        })});
+        });
 
         // allows to access body parameters of the requests, because you have to...
         app.use(bodyParser.urlencoded({ extended: true }));
@@ -58,20 +86,22 @@
                 end(res, 400, 'missing parameter in the request! => ' + err);
             }
 
-            if (!bcrypt.compareSync(password, config[sectionName].PasswordBcrypt)) {
+            if(password === undefined) {
+                end(res, 403, 'no password in request');
+            } else if (!bcrypt.compareSync(password, config[sectionName].PasswordBcrypt)) {
                 end(res, 403, 'wrong password!');
-            }
-            if (!req.hasOwnProperty('file')) {
-                end(res, 403, 'missing upfile');
-            }
-            if (!req.file.hasOwnProperty('fieldname')) {
+            } else if (!req.hasOwnProperty('file')) {
+                end(res, 401, 'missing upfile');
+            } else if (!req.file.hasOwnProperty('fieldname')) {
                 end(res, 403, 'upfile has no filedname!');
-            }
-            if (req.file.fieldname !== 'upfile') {
+            } else if (req.file.fieldname !== 'upfile') {
                 end(res, 403, "upfile should be named 'upfile'!");
-            }
-            if (filesize !== req.file.size) {
+            } else if (isNaN(filesize)) {
+                end(res, 400, 'missing file size in the request!');
+            } else if (filesize !== req.file.size) {
                 end(res, 411, 'file sizes do not match!');
+            } else if (fileHasBeenFiltered) {
+                end(res, 409, 'file exists and is complete');
             }
 
             // file is saved by some NodeJS magic...
