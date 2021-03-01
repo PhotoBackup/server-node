@@ -27,7 +27,7 @@
     "url": "https://github.com/PhotoBackup/server-node"
   },
   "dependencies": {
-    "bcrypt": "0.8.7",
+    "bcrypt": "5.0.1",
     "body-parser": "1.15.2",
     "docopt": "0.6.2",
     "express": "4.14.0",
