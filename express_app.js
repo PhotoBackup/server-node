@@ -84,24 +84,33 @@
                 filesize = parseInt(req.body.filesize, 10);
             } catch (err) {
                 end(res, 400, 'missing parameter in the request! => ' + err);
+                return;
             }
 
             if(password === undefined) {
                 end(res, 403, 'no password in request');
+                return;
             } else if (!bcrypt.compareSync(password, config[sectionName].PasswordBcrypt)) {
                 end(res, 403, 'wrong password!');
+                return;
             } else if (!req.hasOwnProperty('file')) {
                 end(res, 401, 'missing upfile');
+                return;
             } else if (!req.file.hasOwnProperty('fieldname')) {
                 end(res, 403, 'upfile has no filedname!');
+                return;
             } else if (req.file.fieldname !== 'upfile') {
                 end(res, 403, "upfile should be named 'upfile'!");
+                return;
             } else if (isNaN(filesize)) {
                 end(res, 400, 'missing file size in the request!');
+                return;
             } else if (filesize !== req.file.size) {
                 end(res, 411, 'file sizes do not match!');
+                return;
             } else if (fileHasBeenFiltered) {
                 end(res, 409, 'file exists and is complete');
+                return;
             }
 
             // file is saved by some NodeJS magic...
@@ -113,11 +122,13 @@
             var password = req.body.password;
             if (password !== config[sectionName].Password) {
                 end(res, 403, 'wrong password!');
+                return;
             }
 
             fs.access(config[sectionName].MediaRoot, fs.W_OK, function (err) {
                 if (err) {
                     end(res, 500, "Can't write to MEDIA_ROOT!");
+                    return;
                 } else {
                     res.send();
                     endWithSuccess(res);
