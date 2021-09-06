@@ -25,7 +25,7 @@
     var fs = require('fs');
     var ini = require('ini');
     var inquirer = require('inquirer');
-    var sha512 = require('sha512');
+    var sha512 = require('js-sha512');
 
     var questions = [
         {
